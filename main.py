@@ -5,7 +5,7 @@ import json
 import os
 from collections import defaultdict
 
-import google.generativeai as genai
+from google import genai
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -16,8 +16,8 @@ LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash-8b")
+client = genai.Client(api_key=GEMINI_API_KEY)
+MODEL = "gemini-2.0-flash-lite"
 
 history: dict[str, list[dict]] = defaultdict(list)
 MAX_HISTORY = 20
@@ -32,7 +32,7 @@ def verify_signature(body: bytes, signature: str, secret: str = None) -> bool:
 
 
 def add_message(user_id: str, role: str, content: str) -> None:
-    history[user_id].append({"role": role, "parts": [content]})
+    history[user_id].append({"role": role, "parts": [{"text": content}]})
     if len(history[user_id]) > MAX_HISTORY:
         history[user_id] = history[user_id][-MAX_HISTORY:]
 
@@ -80,8 +80,10 @@ async def webhook(request: Request):
 
         add_message(user_id, "user", user_text)
 
-        chat = model.start_chat(history=history[user_id][:-1])
-        response = chat.send_message(user_text)
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=history[user_id],
+        )
         assistant_text = response.text
 
         add_message(user_id, "model", assistant_text)
