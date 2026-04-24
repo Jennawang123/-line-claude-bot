@@ -5,7 +5,7 @@ import json
 import os
 from collections import defaultdict
 
-import anthropic
+import google.generativeai as genai
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -14,9 +14,10 @@ app = FastAPI()
 
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 history: dict[str, list[dict]] = defaultdict(list)
 MAX_HISTORY = 20
@@ -31,7 +32,7 @@ def verify_signature(body: bytes, signature: str, secret: str = None) -> bool:
 
 
 def add_message(user_id: str, role: str, content: str) -> None:
-    history[user_id].append({"role": role, "content": content})
+    history[user_id].append({"role": role, "parts": [content]})
     if len(history[user_id]) > MAX_HISTORY:
         history[user_id] = history[user_id][-MAX_HISTORY:]
 
@@ -79,14 +80,11 @@ async def webhook(request: Request):
 
         add_message(user_id, "user", user_text)
 
-        response = claude.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1024,
-            messages=history[user_id],
-        )
+        chat = model.start_chat(history=history[user_id][:-1])
+        response = chat.send_message(user_text)
+        assistant_text = response.text
 
-        assistant_text = response.content[0].text
-        add_message(user_id, "assistant", assistant_text)
+        add_message(user_id, "model", assistant_text)
 
         await send_reply(reply_token, assistant_text)
 
