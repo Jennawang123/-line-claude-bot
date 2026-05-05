@@ -1,6 +1,6 @@
 fastapi
 uvicorn[standard]
-google-genai
+anthropic
 httpx
 pytest
 pytest-asyncio
