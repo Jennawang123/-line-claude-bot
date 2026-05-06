@@ -209,8 +209,8 @@ async def _claude_create_with_retry(**kwargs):
     for attempt in range(3):
         try:
             return claude.messages.create(**kwargs)
-        except anthropic.OverloadedError:
-            if attempt == 2:
+        except anthropic.APIStatusError as e:
+            if e.status_code != 529 or attempt == 2:
                 raise
             await asyncio.sleep(5 * (attempt + 1))
 
@@ -316,7 +316,15 @@ async def webhook(request: Request):
 
         add_message(user_id, "user", user_text)
 
-        text, extended = await call_claude(list(history[user_id]))
+        try:
+            text, extended = await call_claude(list(history[user_id]))
+        except anthropic.BadRequestError:
+            history[user_id] = []
+            await send_reply(reply_token, ["對話記錄出現問題，已重置，請重新傳送你的問題。"])
+            continue
+        except anthropic.APIStatusError:
+            await send_reply(reply_token, ["伺服器暫時過載，請稍後再試。"])
+            continue
 
         history[user_id] = extended
         add_message(user_id, "assistant", text)
