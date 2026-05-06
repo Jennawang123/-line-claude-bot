@@ -205,13 +205,23 @@ def split_message(text: str, limit: int = 4800) -> list[str]:
     return chunks
 
 
+async def _claude_create_with_retry(**kwargs):
+    for attempt in range(3):
+        try:
+            return claude.messages.create(**kwargs)
+        except anthropic.OverloadedError:
+            if attempt == 2:
+                raise
+            await asyncio.sleep(5 * (attempt + 1))
+
+
 async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
     """Call Claude with CPS system prompt. Handles one tool_use round if triggered.
 
     Returns (final_text, updated_history).
     updated_history includes any tool_use/tool_result messages inserted mid-turn.
     """
-    response = claude.messages.create(
+    response = await _claude_create_with_retry(
         model="claude-sonnet-4-6",
         max_tokens=4096,
         system=CPS_SYSTEM_PROMPT,
@@ -235,7 +245,7 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
         },
     ]
 
-    response2 = claude.messages.create(
+    response2 = await _claude_create_with_retry(
         model="claude-sonnet-4-6",
         max_tokens=4096,
         system=CPS_SYSTEM_PROMPT,
