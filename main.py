@@ -316,6 +316,11 @@ async def webhook(request: Request):
         reply_token = event["replyToken"]
         user_text = event["message"]["text"]
 
+        if user_text.strip() in ("新病人", "/reset", "reset"):
+            history[user_id] = []
+            await send_reply(reply_token, ["已清除對話記錄，請開始描述新病人。"])
+            continue
+
         add_message(user_id, "user", user_text)
 
         try:
