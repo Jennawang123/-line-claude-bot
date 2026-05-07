@@ -318,15 +318,14 @@ async def webhook(request: Request):
 
         try:
             text, extended = await call_claude(list(history[user_id]))
-        except anthropic.BadRequestError as e:
+        except anthropic.BadRequestError:
             history[user_id] = []
-            await send_reply(reply_token, [f"[DEBUG 400] {e.message}"])
+            await send_reply(reply_token, ["對話記錄出現問題，已重置，請重新傳送你的問題。"])
             continue
-        except anthropic.APIStatusError as e:
-            await send_reply(reply_token, [f"[DEBUG {e.status_code}] {e.message}"])
+        except anthropic.APIStatusError:
+            await send_reply(reply_token, ["伺服器暫時過載，請稍後再試。"])
             continue
 
-        history[user_id] = extended
         add_message(user_id, "assistant", text)
 
         await send_reply(reply_token, split_message(text))
