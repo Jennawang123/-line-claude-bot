@@ -228,6 +228,7 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
         max_tokens=4096,
         system=CPS_SYSTEM_PROMPT,
         tools=TOOLS,
+        tool_choice={"type": "auto", "disable_parallel_tool_use": True},
         messages=user_history,
     )
 
@@ -252,6 +253,7 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
         max_tokens=4096,
         system=CPS_SYSTEM_PROMPT,
         tools=TOOLS,
+        tool_choice={"type": "auto", "disable_parallel_tool_use": True},
         messages=extended,
     )
     return response2.content[0].text, extended
@@ -325,9 +327,9 @@ async def webhook(request: Request):
 
         try:
             text, extended = await call_claude(list(history[user_id]))
-        except anthropic.BadRequestError as e:
+        except anthropic.BadRequestError:
             history[user_id] = []
-            await send_reply(reply_token, [f"[DEBUG] {str(e)[:300]}"])
+            await send_reply(reply_token, ["對話記錄出現問題，已重置，請重新傳送你的問題。"])
             continue
         except anthropic.APIStatusError:
             await send_reply(reply_token, ["伺服器暫時過載，請稍後再試。"])
