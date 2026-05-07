@@ -325,9 +325,9 @@ async def webhook(request: Request):
 
         try:
             text, extended = await call_claude(list(history[user_id]))
-        except anthropic.BadRequestError:
+        except anthropic.BadRequestError as e:
             history[user_id] = []
-            await send_reply(reply_token, ["對話記錄出現問題，已重置，請重新傳送你的問題。"])
+            await send_reply(reply_token, [f"[DEBUG] {str(e)[:300]}"])
             continue
         except anthropic.APIStatusError:
             await send_reply(reply_token, ["伺服器暫時過載，請稍後再試。"])
