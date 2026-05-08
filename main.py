@@ -233,7 +233,8 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
     )
 
     if response.stop_reason != "tool_use":
-        return response.content[0].text, user_history
+        text_block = next((b for b in response.content if b.type == "text"), None)
+        return (text_block.text if text_block else "[無回覆內容]"), user_history
 
     tool_block = next(b for b in response.content if b.type == "tool_use")
     evidence = await oe_client.ask(tool_block.input["question"])
@@ -256,7 +257,8 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
         tool_choice={"type": "auto", "disable_parallel_tool_use": True},
         messages=extended,
     )
-    return response2.content[0].text, extended
+    text_block2 = next((b for b in response2.content if b.type == "text"), None)
+    return (text_block2.text if text_block2 else "[無回覆內容]"), extended
 
 
 history: dict[str, list[dict]] = defaultdict(list)
