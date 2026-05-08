@@ -254,7 +254,7 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
         max_tokens=4096,
         system=CPS_SYSTEM_PROMPT,
         tools=TOOLS,
-        tool_choice={"type": "auto", "disable_parallel_tool_use": True},
+        tool_choice={"type": "none"},
         messages=extended,
     )
     text_block2 = next((b for b in response2.content if b.type == "text"), None)
