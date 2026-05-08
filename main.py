@@ -293,6 +293,44 @@ async def send_reply(reply_token: str, messages: list[str]) -> None:
         )
 
 
+async def push_message(user_id: str, messages: list[str]) -> None:
+    async with httpx.AsyncClient() as http:
+        await http.post(
+            "https://api.line.me/v2/bot/message/push",
+            headers={
+                "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "to": user_id,
+                "messages": [{"type": "text", "text": m} for m in messages],
+            },
+            timeout=10.0,
+        )
+
+
+async def process_event(user_id: str, reply_token: str, user_text: str) -> None:
+    if user_text.strip() in ("新病人", "/reset", "reset"):
+        history[user_id] = []
+        await send_reply(reply_token, ["已清除對話記錄，請開始描述新病人。"])
+        return
+
+    add_message(user_id, "user", user_text)
+
+    try:
+        text, _ = await call_claude(list(history[user_id]))
+    except anthropic.BadRequestError:
+        history[user_id] = []
+        await push_message(user_id, ["對話記錄出現問題，已重置，請重新傳送你的問題。"])
+        return
+    except anthropic.APIStatusError:
+        await push_message(user_id, ["伺服器暫時過載，請稍後再試。"])
+        return
+
+    add_message(user_id, "assistant", text)
+    await push_message(user_id, split_message(text))
+
+
 @app.get("/")
 async def health():
     return {"status": "ok"}
@@ -318,25 +356,6 @@ async def webhook(request: Request):
         reply_token = event["replyToken"]
         user_text = event["message"]["text"]
 
-        if user_text.strip() in ("新病人", "/reset", "reset"):
-            history[user_id] = []
-            await send_reply(reply_token, ["已清除對話記錄，請開始描述新病人。"])
-            continue
-
-        add_message(user_id, "user", user_text)
-
-        try:
-            text, extended = await call_claude(list(history[user_id]))
-        except anthropic.BadRequestError:
-            history[user_id] = []
-            await send_reply(reply_token, ["對話記錄出現問題，已重置，請重新傳送你的問題。"])
-            continue
-        except anthropic.APIStatusError:
-            await send_reply(reply_token, ["伺服器暫時過載，請稍後再試。"])
-            continue
-
-        add_message(user_id, "assistant", text)
-
-        await send_reply(reply_token, split_message(text))
+        asyncio.create_task(process_event(user_id, reply_token, user_text))
 
     return JSONResponse(content={"status": "ok"})
