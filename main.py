@@ -3,8 +3,11 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 from collections import defaultdict
+
+logging.basicConfig(level=logging.INFO)
 
 import anthropic
 import httpx
@@ -232,11 +235,16 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
         messages=user_history,
     )
 
+    logging.info("R1 stop_reason=%s content_types=%s", response.stop_reason, [b.type for b in response.content])
+
     if response.stop_reason != "tool_use":
         text_block = next((b for b in response.content if b.type == "text"), None)
+        if not text_block:
+            logging.warning("R1 no text block: %s", response.content)
         return (text_block.text if text_block else "[無回覆內容]"), user_history
 
     tool_block = next(b for b in response.content if b.type == "tool_use")
+    logging.info("tool_use question=%s", tool_block.input.get("question"))
     evidence = await oe_client.ask(tool_block.input["question"])
 
     extended = user_history + [
@@ -257,7 +265,10 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
         tool_choice={"type": "none"},
         messages=extended,
     )
+    logging.info("R2 stop_reason=%s content_types=%s", response2.stop_reason, [b.type for b in response2.content])
     text_block2 = next((b for b in response2.content if b.type == "text"), None)
+    if not text_block2:
+        logging.warning("R2 no text block: %s", response2.content)
     return (text_block2.text if text_block2 else "[無回覆內容]"), extended
 
 
