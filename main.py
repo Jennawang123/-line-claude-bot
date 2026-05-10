@@ -267,9 +267,19 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
     )
     logging.info("R2 stop_reason=%s content_types=%s", response2.stop_reason, [b.type for b in response2.content])
     text_block2 = next((b for b in response2.content if b.type == "text"), None)
+
     if not text_block2:
-        logging.warning("R2 no text block: %s", response2.content)
-    return (text_block2.text if text_block2 else "[無回覆內容]"), extended
+        logging.warning("R2 empty content, falling back to no-tool call")
+        response3 = await _claude_create_with_retry(
+            model="claude-sonnet-4-6",
+            max_tokens=4096,
+            system=CPS_SYSTEM_PROMPT,
+            messages=user_history,
+        )
+        logging.info("R3 stop_reason=%s content_types=%s", response3.stop_reason, [b.type for b in response3.content])
+        text_block2 = next((b for b in response3.content if b.type == "text"), None)
+
+    return (text_block2.text if text_block2 else "[Claude 無法產生回覆，請重試]"), extended
 
 
 history: dict[str, list[dict]] = defaultdict(list)
