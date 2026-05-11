@@ -365,7 +365,7 @@ async def process_event(user_id: str, reply_token: str, user_text: str) -> None:
     await push_message(user_id, split_message(text))
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def health():
     return {"status": "ok"}
 
