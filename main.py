@@ -87,6 +87,7 @@ LR 解讀：
 ・優先檢查：①XXX ②XXX ③XXX
 ・緊急處置：XXX（無急症則寫「目前無立即急症」）
 
+- 若有呼叫 search_evidence，步驟 5 或結論中引用文獻時標明編號，例如（文獻 1）（文獻 2）
 - 若問題非臨床病例（一般對話），正常回覆即可，不需套用推理框架"""
 
 TOOLS = [
@@ -188,9 +189,21 @@ class OpenEvidenceClient:
         output = article.get("output") or {}
         structured = output.get("structured_article") or {}
         raw_text = structured.get("raw_text", "")
-        if raw_text:
-            return raw_text
-        return output.get("text") or "[文獻搜尋無結果]"
+        text = raw_text or output.get("text") or "[文獻搜尋無結果]"
+
+        refs = structured.get("references") or output.get("references") or []
+        if refs:
+            lines = ["\n\n---\n【參考文獻】"]
+            for i, r in enumerate(refs[:8], 1):
+                title = r.get("title") or r.get("citation") or ""
+                journal = r.get("journal") or r.get("source") or ""
+                year = r.get("year") or r.get("publication_year") or ""
+                url = r.get("url") or r.get("link") or ""
+                parts = filter(None, [title, journal, str(year) if year else "", url])
+                lines.append(f"{i}. {'. '.join(parts)}")
+            text += "\n".join(lines)
+
+        return text
 
 
 oe_client = OpenEvidenceClient()
@@ -242,7 +255,7 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
         max_tokens=4096,
         system=CPS_SYSTEM_PROMPT,
         tools=TOOLS,
-        tool_choice={"type": "auto", "disable_parallel_tool_use": True},
+        tool_choice={"type": "any", "disable_parallel_tool_use": True},
         messages=user_history,
     )
 
@@ -352,7 +365,7 @@ async def process_event(user_id: str, reply_token: str, user_text: str) -> None:
     add_message(user_id, "user", user_text)
 
     try:
-        text, _ = await call_claude(list(history[user_id]))
+        text, updated_history = await call_claude(list(history[user_id]))
     except anthropic.BadRequestError:
         history[user_id] = []
         await push_message(user_id, ["對話記錄出現問題，已重置，請重新傳送你的問題。"])
