@@ -71,23 +71,26 @@ LR 解讀：
 
 ## 輸出規範
 - 語言：繁體中文
-- 環境：LINE 純文字，不支援 Markdown，禁用 **bold**、`code`、表格
-- 節標題格式：【步驟名稱】
+- 環境：LINE 純文字，不支援顏色/HTML/Markdown，禁用 **bold**、`code`、表格
+- 節標題格式：▌【步驟名稱】（用 ▌ 做視覺分隔）
+- 重要關鍵字或結論用 ► 開頭標示
 - 鑑別診斷機率標示（每條診斷前加色塊）：
-  - 🔴 機率 > 30%
-  - 🟡 機率 10–30%
-  - 🟢 機率 < 10%
+  - 🔴 機率 > 30%（高）
+  - 🟡 機率 10–30%（中）
+  - 🟢 機率 < 10%（低）
   - ⚠️ 不可漏診（無論機率高低必須列出）
-- 包含 LR+/LR− 數值（已知時）
-- 最後必須加一個統整區塊，格式如下：
+- LR 數值用 ↑（LR+）↓（LR−）標示，例如：LR+ ↑10.4
+- 最後必須加統整區塊，格式如下：
 
+════════════════
 📋 統整
-・最可能診斷：XXX（xx%）
-・不可漏診：XXX
-・優先檢查：①XXX ②XXX ③XXX
-・緊急處置：XXX（無急症則寫「目前無立即急症」）
+► 最可能診斷：XXX（xx%）
+⚠️ 不可漏診：XXX
+🔍 優先檢查：①XXX ②XXX ③XXX
+🚨 緊急處置：XXX（無急症則寫「目前無立即急症」）
+════════════════
 
-- 若有呼叫 search_evidence，步驟 5 或結論中引用文獻時標明編號，例如（文獻 1）（文獻 2）
+- 若有呼叫 search_evidence，結論中引用文獻時標明編號，例如（文獻 1）（文獻 2）
 - 若問題非臨床病例（一般對話），正常回覆即可，不需套用推理框架"""
 
 TOOLS = [
@@ -191,17 +194,30 @@ class OpenEvidenceClient:
         raw_text = structured.get("raw_text", "")
         text = raw_text or output.get("text") or "[文獻搜尋無結果]"
 
-        refs = structured.get("references") or output.get("references") or []
+        # log 實際 key 供除錯
+        logging.info("OE output keys=%s structured keys=%s", list(output.keys()), list(structured.keys()))
+
+        refs = (
+            structured.get("references")
+            or structured.get("citations")
+            or output.get("references")
+            or output.get("citations")
+            or []
+        )
+        logging.info("OE refs count=%d sample=%s", len(refs), refs[:1] if refs else [])
+
         if refs:
-            lines = ["\n\n---\n【參考文獻】"]
+            lines = ["\n\n📚【資料出處】"]
             for i, r in enumerate(refs[:8], 1):
-                title = r.get("title") or r.get("citation") or ""
-                journal = r.get("journal") or r.get("source") or ""
-                year = r.get("year") or r.get("publication_year") or ""
-                url = r.get("url") or r.get("link") or ""
-                parts = filter(None, [title, journal, str(year) if year else "", url])
-                lines.append(f"{i}. {'. '.join(parts)}")
+                title = r.get("title") or r.get("citation") or r.get("text") or ""
+                journal = r.get("journal") or r.get("source") or r.get("publisher") or ""
+                year = r.get("year") or r.get("publication_year") or r.get("date") or ""
+                url = r.get("url") or r.get("link") or r.get("doi") or ""
+                parts = [p for p in [title, journal, str(year) if year else "", url] if p]
+                lines.append(f"{i}. {' | '.join(parts)}" if parts else f"{i}. {r}")
             text += "\n".join(lines)
+        else:
+            text += "\n\n📚【資料出處】OpenEvidence 文獻資料庫"
 
         return text
 
