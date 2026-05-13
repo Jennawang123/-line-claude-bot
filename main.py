@@ -64,6 +64,11 @@ LR 解讀：
 後驗勝算 = 先驗勝算 × LR
 後驗機率 = 後驗勝算 / (1 + 後驗勝算)
 
+文獻重點呈現格式：
+- ★ 關鍵數值（LR、敏感度、特異度、NNT、劑量）
+- ► 指引建議等級（如 ESC Class I）
+- ⚡ 與先前推理不同或需修正的發現
+
 **步驟 6 — 結論**
 - 最可能診斷（附最終機率）
 - 建議檢查（依優先順序）
@@ -298,12 +303,19 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
     else:
         evidence_text, citation_footer = evidence_raw, "📚【資料出處】OpenEvidence 文獻資料庫"
 
+    formatted_evidence = (
+        "以下是 OpenEvidence 文獻摘要，請將重點整合進推理，"
+        "並依照輸出規範：用 ▌【】標示節標題、► 標示重要結論、"
+        "數值/LR/劑量用 ★ 前置標示，分層呈現。\n\n"
+        + evidence_text
+    )
+
     extended = user_history + [
         {"role": "assistant", "content": _blocks_to_dicts(response.content)},
         {
             "role": "user",
             "content": [
-                {"type": "tool_result", "tool_use_id": tool_block.id, "content": evidence_text}
+                {"type": "tool_result", "tool_use_id": tool_block.id, "content": formatted_evidence}
             ],
         },
     ]
