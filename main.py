@@ -206,20 +206,25 @@ class OpenEvidenceClient:
         )
         logging.info("OE refs count=%d sample=%s", len(refs), refs[:1] if refs else [])
 
+        # 截斷正文避免 R2 token 爆炸（保留前 2500 字）
+        text = text[:2500]
+
+        citation_block = ""
         if refs:
-            lines = ["\n\n📚【資料出處】"]
-            for i, r in enumerate(refs[:8], 1):
+            lines = ["📚【資料出處】"]
+            for i, r in enumerate(refs[:6], 1):
                 title = r.get("title") or r.get("citation") or r.get("text") or ""
                 journal = r.get("journal") or r.get("source") or r.get("publisher") or ""
                 year = r.get("year") or r.get("publication_year") or r.get("date") or ""
                 url = r.get("url") or r.get("link") or r.get("doi") or ""
                 parts = [p for p in [title, journal, str(year) if year else "", url] if p]
                 lines.append(f"{i}. {' | '.join(parts)}" if parts else f"{i}. {r}")
-            text += "\n".join(lines)
+            citation_block = "\n".join(lines)
         else:
-            text += "\n\n📚【資料出處】OpenEvidence 文獻資料庫"
+            citation_block = "📚【資料出處】OpenEvidence 文獻資料庫"
 
-        return text
+        # citation_block 分開回傳，掛在 tool_result 後面直接附給用戶
+        return text + "\n\n[CITATIONS]\n" + citation_block
 
 
 oe_client = OpenEvidenceClient()
@@ -285,21 +290,27 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
 
     tool_block = next(b for b in response.content if b.type == "tool_use")
     logging.info("tool_use question=%s", tool_block.input.get("question"))
-    evidence = await oe_client.ask(tool_block.input["question"])
+    evidence_raw = await oe_client.ask(tool_block.input["question"])
+
+    # 拆出 citation block，只把正文送給 Claude（避免 R2 輸入過長）
+    if "\n[CITATIONS]\n" in evidence_raw:
+        evidence_text, citation_footer = evidence_raw.split("\n[CITATIONS]\n", 1)
+    else:
+        evidence_text, citation_footer = evidence_raw, "📚【資料出處】OpenEvidence 文獻資料庫"
 
     extended = user_history + [
         {"role": "assistant", "content": _blocks_to_dicts(response.content)},
         {
             "role": "user",
             "content": [
-                {"type": "tool_result", "tool_use_id": tool_block.id, "content": evidence}
+                {"type": "tool_result", "tool_use_id": tool_block.id, "content": evidence_text}
             ],
         },
     ]
 
     response2 = await _claude_create_with_retry(
         model="claude-sonnet-4-6",
-        max_tokens=4096,
+        max_tokens=8192,
         system=CPS_SYSTEM_PROMPT,
         tools=TOOLS,
         tool_choice={"type": "none"},
@@ -312,14 +323,17 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
         logging.warning("R2 empty content, falling back to no-tool call")
         response3 = await _claude_create_with_retry(
             model="claude-sonnet-4-6",
-            max_tokens=4096,
+            max_tokens=8192,
             system=CPS_SYSTEM_PROMPT,
             messages=user_history,
         )
         logging.info("R3 stop_reason=%s content_types=%s", response3.stop_reason, [b.type for b in response3.content])
         text_block2 = next((b for b in response3.content if b.type == "text"), None)
+        # R3 fallback 沒有 OE，用保底來源
+        citation_footer = "📚【資料出處】Claude 訓練知識（截至 2025/08）"
 
-    return (text_block2.text if text_block2 else "[Claude 無法產生回覆，請重試]"), extended
+    final_text = text_block2.text if text_block2 else "[Claude 無法產生回覆，請重試]"
+    return final_text + "\n\n" + citation_footer, extended
 
 
 history: dict[str, list[dict]] = defaultdict(list)
