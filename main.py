@@ -384,18 +384,20 @@ async def send_reply(reply_token: str, messages: list[str]) -> None:
 
 async def push_message(user_id: str, messages: list[str]) -> None:
     async with httpx.AsyncClient() as http:
-        await http.post(
-            "https://api.line.me/v2/bot/message/push",
-            headers={
-                "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "to": user_id,
-                "messages": [{"type": "text", "text": m} for m in messages],
-            },
-            timeout=10.0,
-        )
+        for i in range(0, len(messages), 5):
+            batch = messages[i:i+5]
+            await http.post(
+                "https://api.line.me/v2/bot/message/push",
+                headers={
+                    "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "to": user_id,
+                    "messages": [{"type": "text", "text": m} for m in batch],
+                },
+                timeout=10.0,
+            )
 
 
 async def process_event(user_id: str, reply_token: str, user_text: str) -> None:
@@ -416,8 +418,19 @@ async def process_event(user_id: str, reply_token: str, user_text: str) -> None:
         await push_message(user_id, ["伺服器暫時過載，請稍後再試。"])
         return
 
+    # 拆出 citation footer，讓它永遠當最後一條獨立訊息送出
+    if "\n\n📚" in text:
+        main_text, citation_msg = text.rsplit("\n\n📚", 1)
+        citation_msg = "📚" + citation_msg
+    else:
+        main_text, citation_msg = text, None
+
+    logging.info("FINAL main_len=%d citation=%s", len(main_text), repr(citation_msg[:80] if citation_msg else None))
     add_message(user_id, "assistant", text)
-    await push_message(user_id, split_message(text))
+    messages_to_send = split_message(main_text)
+    if citation_msg:
+        messages_to_send.append(citation_msg)
+    await push_message(user_id, messages_to_send)
 
 
 @app.api_route("/", methods=["GET", "HEAD"])
