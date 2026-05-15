@@ -281,7 +281,7 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
         max_tokens=4096,
         system=CPS_SYSTEM_PROMPT,
         tools=TOOLS,
-        tool_choice={"type": "any", "disable_parallel_tool_use": True},
+        tool_choice={"type": "tool", "name": "search_evidence"},
         messages=user_history,
     )
 
