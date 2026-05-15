@@ -226,7 +226,7 @@ class OpenEvidenceClient:
                 lines.append(f"{i}. {' | '.join(parts)}" if parts else f"{i}. {r}")
             citation_block = "\n".join(lines)
         else:
-            citation_block = "📚【資料出處】OpenEvidence 文獻資料庫"
+            citation_block = "📚【資料出處】OpenEvidence 文獻資料庫\nhttps://www.openevidence.com"
 
         # citation_block 分開回傳，掛在 tool_result 後面直接附給用戶
         return text + "\n\n[CITATIONS]\n" + citation_block
