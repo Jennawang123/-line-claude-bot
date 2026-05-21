@@ -386,7 +386,7 @@ async def webhook(request: Request):
         if event.get("message", {}).get("type") != "text":
             continue
 
-         source = event["source"]
+        source = event["source"]
         logging.info("EVENT source=%s", source)
         user_id = source.get("userId", "")
         if source.get("type") == "group":
