@@ -386,9 +386,14 @@ async def webhook(request: Request):
         if event.get("message", {}).get("type") != "text":
             continue
 
-        user_id = event["source"]["userId"]
+         source = event["source"]
+        logging.info("EVENT source=%s", source)
+        user_id = source.get("userId", "")
+        if source.get("type") == "group":
+            logging.info("LINE GROUP groupId=%s userId=%s", source.get("groupId"), user_id)
         reply_token = event["replyToken"]
         user_text = event["message"]["text"]
+    
 
         asyncio.create_task(process_event(user_id, reply_token, user_text))
 
