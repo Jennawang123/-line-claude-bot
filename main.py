@@ -202,28 +202,23 @@ class OpenEvidenceClient:
         # log 實際 key 供除錯
         logging.info("OE output keys=%s structured keys=%s", list(output.keys()), list(structured.keys()))
 
-        refs = (
-            structured.get("references")
-            or structured.get("citations")
-            or output.get("references")
-            or output.get("citations")
-            or []
-        )
-        logging.info("OE refs count=%d sample=%s", len(refs), refs[:1] if refs else [])
+        # external_search_results 是實際的參考文獻欄位
+        ext = structured.get("external_search_results") or []
+        logging.info("OE ext_results count=%d sample=%s", len(ext), ext[:1] if ext else [])
 
         # 截斷正文避免 R2 token 爆炸（保留前 2500 字）
         text = text[:2500]
 
         citation_block = ""
-        if refs:
+        if ext:
             lines = ["📚【資料出處】"]
-            for i, r in enumerate(refs[:6], 1):
-                title = r.get("title") or r.get("citation") or r.get("text") or ""
+            for i, r in enumerate(ext[:6], 1):
+                title = r.get("title") or r.get("name") or ""
                 journal = r.get("journal") or r.get("source") or r.get("publisher") or ""
                 year = r.get("year") or r.get("publication_year") or r.get("date") or ""
-                url = r.get("url") or r.get("link") or r.get("doi") or ""
+                url = r.get("url") or r.get("link") or ""
                 parts = [p for p in [title, journal, str(year) if year else "", url] if p]
-                lines.append(f"{i}. {' | '.join(parts)}" if parts else f"{i}. {r}")
+                lines.append(f"{i}. {' | '.join(parts)}" if parts else f"{i}. {json.dumps(r)[:80]}")
             citation_block = "\n".join(lines)
         else:
             citation_block = "📚【資料出處】OpenEvidence 文獻資料庫\nhttps://www.openevidence.com"
@@ -281,7 +276,7 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
         max_tokens=4096,
         system=CPS_SYSTEM_PROMPT,
         tools=TOOLS,
-        tool_choice={"type": "tool", "name": "search_evidence"},
+        tool_choice={"type": "tool", "name": "search_evidence", "disable_parallel_tool_use": True},
         messages=user_history,
     )
 
