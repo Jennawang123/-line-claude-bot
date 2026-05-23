@@ -320,7 +320,7 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
         max_tokens=8192,
         system=CPS_SYSTEM_PROMPT,
         tools=TOOLS,
-        tool_choice={"type": "none"},
+        tool_choice={"type": "auto"},
         messages=extended,
     )
     logging.info("R2 stop_reason=%s content_types=%s", response2.stop_reason, [b.type for b in response2.content])
