@@ -327,17 +327,15 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
     text_block2 = next((b for b in response2.content if b.type == "text"), None)
 
     if not text_block2:
-        logging.warning("R2 empty content, falling back to no-tool call")
+        logging.warning("R2 empty content, falling back with OE results")
         response3 = await _claude_create_with_retry(
             model="claude-sonnet-4-6",
             max_tokens=8192,
             system=CPS_SYSTEM_PROMPT,
-            messages=user_history,
+            messages=extended,  # 帶著 OE tool_result，不帶 tools 讓 Claude 直接整合
         )
         logging.info("R3 stop_reason=%s content_types=%s", response3.stop_reason, [b.type for b in response3.content])
         text_block2 = next((b for b in response3.content if b.type == "text"), None)
-        # R3 fallback 沒有 OE，用保底來源
-        citation_footer = "📚【資料出處】Claude 訓練知識（截至 2025/08）"
 
     final_text = text_block2.text if text_block2 else "[Claude 無法產生回覆，請重試]"
     return final_text + "\n\n" + citation_footer, extended
