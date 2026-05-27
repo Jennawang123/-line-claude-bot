@@ -292,53 +292,42 @@ async def call_claude(user_history: list[dict]) -> tuple[str, list[dict]]:
     logging.info("tool_use question=%s", tool_block.input.get("question"))
     evidence_raw = await oe_client.ask(tool_block.input["question"])
 
-    # 拆出 citation block，只把正文送給 Claude（避免 R2 輸入過長）
+    # 拆出 citation block
     if "\n[CITATIONS]\n" in evidence_raw:
         evidence_text, citation_footer = evidence_raw.split("\n[CITATIONS]\n", 1)
     else:
-        evidence_text, citation_footer = evidence_raw, "📚【資料出處】OpenEvidence 文獻資料庫"
+        evidence_text, citation_footer = evidence_raw, "📚【資料出處】OpenEvidence 文獻資料庫\nhttps://www.openevidence.com"
 
-    formatted_evidence = (
-        "以下是 OpenEvidence 文獻摘要，請將重點整合進推理，"
-        "並依照輸出規範：用 ▌【】標示節標題、► 標示重要結論、"
-        "數值/LR/劑量用 ★ 前置標示，分層呈現。\n\n"
-        + evidence_text
-    )
+    # R2：不用 tool_use 架構，把 OE 文字直接附在 user 訊息尾端再重問
+    # 這樣完全迴避 tool_choice/tool_result 的空回應問題
+    last_user = user_history[-1]["content"]
+    if isinstance(last_user, list):
+        last_user_text = " ".join(b.get("text", "") for b in last_user if isinstance(b, dict))
+    else:
+        last_user_text = last_user
 
-    extended = user_history + [
-        {"role": "assistant", "content": _blocks_to_dicts(response.content)},
-        {
-            "role": "user",
-            "content": [
-                {"type": "tool_result", "tool_use_id": tool_block.id, "content": formatted_evidence}
-            ],
-        },
-    ]
+    r2_messages = user_history[:-1] + [{
+        "role": "user",
+        "content": (
+            last_user_text
+            + "\n\n---\n[OpenEvidence 文獻摘要]\n"
+            + evidence_text[:2000]
+            + "\n---\n請整合以上文獻，完成完整 CPS 分析，"
+            "文獻重點用 ★ 標示數值、► 標示指引建議、⚡ 標示修正發現。"
+        )
+    }]
 
     response2 = await _claude_create_with_retry(
         model="claude-sonnet-4-6",
         max_tokens=8192,
         system=CPS_SYSTEM_PROMPT,
-        tools=TOOLS,
-        tool_choice={"type": "auto"},
-        messages=extended,
+        messages=r2_messages,
     )
     logging.info("R2 stop_reason=%s content_types=%s", response2.stop_reason, [b.type for b in response2.content])
     text_block2 = next((b for b in response2.content if b.type == "text"), None)
 
-    if not text_block2:
-        logging.warning("R2 empty content, falling back with OE results")
-        response3 = await _claude_create_with_retry(
-            model="claude-sonnet-4-6",
-            max_tokens=8192,
-            system=CPS_SYSTEM_PROMPT,
-            messages=extended,  # 帶著 OE tool_result，不帶 tools 讓 Claude 直接整合
-        )
-        logging.info("R3 stop_reason=%s content_types=%s", response3.stop_reason, [b.type for b in response3.content])
-        text_block2 = next((b for b in response3.content if b.type == "text"), None)
-
     final_text = text_block2.text if text_block2 else "[Claude 無法產生回覆，請重試]"
-    return final_text + "\n\n" + citation_footer, extended
+    return final_text + "\n\n" + citation_footer, user_history
 
 
 history: dict[str, list[dict]] = defaultdict(list)
