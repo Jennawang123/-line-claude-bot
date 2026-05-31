@@ -4,5 +4,3 @@ anthropic
 httpx
 pytest
 pytest-asyncio
-python-multipart
-yfinance
