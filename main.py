@@ -172,7 +172,7 @@ class OpenEvidenceClient:
             resp = await client.post(
                 f"{self.BASE_URL}/api/article", headers=self._headers(), json=payload
             )
-            if resp.status_code == 401:
+            if resp.status_code in (401, 403):
                 return "[文獻搜尋暫時無法使用，請更新 Cookies]"
             resp.raise_for_status()
             article_id = resp.json()["id"]
@@ -185,7 +185,7 @@ class OpenEvidenceClient:
                 resp = await client.get(
                     f"{self.BASE_URL}/api/article/{article_id}", headers=self._headers()
                 )
-                if resp.status_code == 401:
+                if resp.status_code in (401, 403):
                     return "[文獻搜尋暫時無法使用，請更新 Cookies]"
                 article = resp.json()
                 status = str(article.get("status", "")).lower()
